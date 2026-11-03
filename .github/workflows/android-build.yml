@@ -1,0 +1,73 @@
+name: Build DARK MYSTERY APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Extract project ZIP
+        run: |
+          mkdir -p extracted
+          unzip -q DARK-MYSTERY-B.zip -d extracted
+          find extracted -name package.json
+
+      - name: Find project directory
+        run: |
+          PROJECT_DIR=$(dirname "$(find extracted -name package.json | head -n 1)")
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "package.json not found"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        run: |
+          cd "$PROJECT_DIR"
+          npm install
+
+      - name: Build web assets
+        run: |
+          cd "$PROJECT_DIR"
+          npm run build
+
+      - name: Prepare Android
+        run: |
+          cd "$PROJECT_DIR"
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+
+      - name: Build Debug APK
+        run: |
+          cd "$PROJECT_DIR/android"
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Verify APK
+        run: |
+          cp "$PROJECT_DIR/android/app/build/outputs/apk/debug/app-debug.apk" ./app-debug.apk
+          test -s app-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app-debug.apk
